@@ -1,0 +1,414 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+Load scripts
+
+```{r message=FALSE}
+
+library(knitr)
+
+source("./Scripts/Settings.R")
+source("./Scripts/AusWeather.R")
+source("./Scripts/Utility.R")
+
+library(recipes)
+
+aus_map <- function(data) {
+    
+    map <- with_nameSpace(
+        "maps", 
+        ggplot2::borders("world", regions = "Australia",  fill = "grey90", colour = "black")
+    )
+    
+    ggplot(data) + map  + xlim(112, 155) + ylim(-44, -10)  # Set y axis limits
+}
+
+aus_dark_map <- function(data) {
+    
+    map <- with_nameSpace(
+        "maps", 
+        ggplot2::borders("world", regions = "Australia",  fill = "DarkGrey", colour = "black")
+    )
+    
+    ggplot(data) + map  + xlim(112, 155) + ylim(-44, -10)  # Set y axis limits
+}
+
+```
+
+## Degenerate Stations
+
+Get rainfall summary
+
+```{r}
+
+rainfall_complete_stations <- aus_load_stations(aus_rainfall_station_info)
+
+rainfall_complete_summary <- 
+    aus_observation_summaries(aus_rainfall_observations_info)
+
+rainfall_complete_all_summary <- 
+    rainfall_complete_summary %>% 
+    unnest(All) %>%
+    mutate('N %'= (N / (N_Year * 365)) * 100, `NA %` = (N_NA / N) * 100, 'Zero %' = (N_Zero / (N_Zero + N_NonZero)) * 100) %>%
+    inner_join(select(rainfall_complete_stations, Zone, Station, Latitude, Longitude) , by = c("Zone","Station"))
+
+rainfall_good_stations_code <-
+    rainfall_complete_all_summary %>%
+    filter(Status == "Good") %>%  # We actually need data
+    filter(between(Longitude, 112, 155), between(Latitude, -44, -10)) %>% # Strip out all the remote islands.
+    filter(N_NonZero > 0) %>% # If their are *no* recordings assume an outlier
+    filter(N_Year >= 25) %>% # We need at least 20 years of data
+    filter(`NA %` >= 25) %>% # We need more than 25% of data points filled
+    pull(Station)
+
+rainfall_good_stations <- rainfall_complete_stations %>% filter(Station %in% rainfall_good_stations_code)
+rainfall_good_summary <- 
+    rainfall_complete_summary %>% 
+    filter(Station %in% rainfall_good_stations_code) %>%
+    inner_join(rainfall_good_stations, by = c("Zone","Station")) %>%
+    select(Zone, Station, Name, Latitude, Longitude, everything(), -variable, -units, -Status, -Error)
+
+rainfall_good_all_summary <- 
+    rainfall_good_summary %>% 
+    unnest(All) %>% 
+    select(-Decadal, -Yearly) %>% 
+    mutate('N %'= (N / (N_Year * 365)) * 100, `NA %` = (N_NA / N) * 100, 'Zero %' = (N_Zero / (N_Zero + N_NonZero)) * 100)
+rainfall_good_all_summary
+
+```
+
+List weather stations that are seem degenerate
+
+```{r}
+
+rainfall_complete_all_summary %>% 
+    filter(NearZeroVar) %>% 
+    select(Station, N_Year, N, `NA %`, 'Zero %') %>% 
+    sample_n(20)
+
+```
+
+Some stations with a very low % of NAs have lots of zeros. Huge amounts of australia is arid. Maybe thats to be expected.
+
+Plot Zero % on map.
+
+```{r}
+
+rainfall_complete_all_summary %>% 
+    aus_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = `Zero %`), size = .5) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = -1)
+```
+
+Stations recording high number of zeros are in arid regions. Recording large numbers of zeros is to be expected and is informational.
+
+Plot Na % on map.
+
+```{r}
+
+rainfall_complete_all_summary %>% 
+    aus_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = `NA %`), size = .5) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = 1)
+```
+
+If we include all stations then we get that consistently across the board the majority of stations have a low number of measurements.
+We'll drop out stations that record a low % of measurements.
+
+```{r}
+
+rainfall_good_all_summary %>% 
+    aus_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = `NA %`), size = .5) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = 1)
+```
+
+If we drop out stations with a low % of NAs then we get what seems to a scattering of stations across australia with a reasonble number in remote regions.
+
+```{r}
+rainfall_good_all_summary %>% 
+    aus_dark_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = log2(Mean))) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = 1)
+```
+
+## Samples Stations
+
+Lets determine a random selection of stations to explore.
+
+Pick a random set then use max dissimlarity to detect unusual samples.
+
+Get a selection of 100 stations.
+
+
+```{r}
+
+# Choose a selection of statistics used to select a sample
+sample_prep <- 
+    rainfall_good_all_summary %>% 
+    select(N_Year, Min_Year, Latitude, Longitude, N, 'N %','NA %', 'Zero %', Min, Mean, Max, SD, Skew)
+
+# Center and scale all properties
+sample_prep <- recipe(sample_prep) %>% step_center(everything()) %>% step_scale(everything()) %>% prep(retain = TRUE) %>% juice()
+
+# Choose an initial random set of 5 and a further 15 records that have max disimilarity
+set.seed(101)
+sample_initial_idx <- sample(1:nrow(sample_prep), 5)
+sample_dissim_idx <- caret::maxDissim(sample_prep[sample_initial_idx,], sample_prep, n = 20, verbose = FALSE)
+
+sample_all_summary <- rainfall_good_all_summary[c(sample_initial_idx, sample_dissim_idx),]
+sample_stations <- rainfall_complete_stations %>% filter(Station %in% sample_all_summary$Station)
+sample_summary <- rainfall_good_summary %>% filter(Station %in% sample_all_summary$Station)
+sample_all_summary <- sample_all_summary %>% select(Station, Latitude, Longitude, N_Year, Min_Year, Max_Year, N, 'N %', 'NA %', 'Zero %', Min, Mean, Max, SD, Skew)
+sample_all_summary
+
+
+```
+
+Stations have measurments for almost every day they are considered to have a record for. Neat.
+
+There are stations with no non-zero measurements. Dismiss them.
+There are stations with only a few years of observations. Dismiss all stations with less than 20 years data.
+There are stations that are almost entirely NA. Dismiss any with less than 25% of records.
+
+# Sample Exploration
+
+Plot locations of samples
+
+```{r}
+
+sample_all_summary %>% 
+    aus_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = Mean)) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = 1)
+
+
+```
+
+
+## Yearly Exploration
+
+Plot number of observations per year across time.
+
+```{r}
+
+sample_complete_yearly_summary <- 
+    sample_summary %>% 
+    unnest(Yearly) %>% 
+    mutate('N %'= (N / 365) * 100, `Present %` = (N_Present / N) * 100, 'Zero %' = (N_Zero / (N_Zero + N_NonZero)) * 100)
+
+```
+
+```{r}
+sample_complete_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = N)) + facet_wrap(~ Station)
+```
+
+All the records are in solid blocks. There are no drop outs for stations in the records we have.
+
+Plot % of NA of observations per year across time.
+
+```{r}
+sample_complete_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = `Present %`)) + facet_wrap(~ Station)
+```
+
+However the record keeping reliability of some stations is highly erratic. They often go through periods of not keeping data.
+
+Plot % of Zero observations per year across time.
+
+```{r}
+sample_complete_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = `Zero %`)) + facet_wrap(~ Station)
+```
+
+Same story.The number of zeros recorded is inconsistent. Some years seem to have no data at all and thus we can't even calc a zero%.
+
+Plot mean of observations per year across time. This is the sort of figure we will be interested in.
+
+```{r}
+sample_complete_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = Mean)) + facet_wrap(~ Station)
+```
+
+It looks way too erractic for some stations.
+
+## Years with complete records.
+
+To be included a year must have at least 25% of records recorded.
+
+```{r}
+
+sample_yearly_summary <- 
+    sample_summary %>% 
+    unnest(Yearly) %>% 
+    mutate('N %'= (N / 365) * 100, `Present %` = (N_Present / N) * 100, 'Zero %' = (N_Zero / (N_Zero + N_NonZero)) * 100) %>%
+    filter(`Present %` >= 25, N >= 360)
+
+```
+
+Now plot number of observations per year. We now expect gaps.
+
+```{r}
+sample_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = N)) + facet_wrap(~ Station)
+```
+
+
+Now plot % of Present observations per year across time. Years should an observable signal or be dropped out.
+
+```{r}
+sample_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = `Present %`)) + facet_wrap(~ Station)
+```
+
+Plot % of Zero observations per year across time.
+
+```{r}
+sample_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = `Zero %`)) + facet_wrap(~ Station)
+```
+
+Okay we have either a measure for a year or the year is dropped out entirely and the number of days per year where a zero was recorded looks consistent for each station over time.
+
+A possibly exception if 96005.
+
+Also some station have had their years almost entirely dropped out.
+
+Really the important measure is mean rainfall per year.
+
+```{r}
+sample_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = Mean)) + facet_wrap(~ Station)
+```
+
+Lets drop station 31141 from our plot so we can focus on the remaining stations.
+
+```{r}
+sample_yearly_summary %>% filter(Station != '31141') %>% ggplot() + geom_col(aes(x = Year, y = Mean)) + facet_wrap(~ Station)
+```
+
+The means look more consistent over time but there may be some possible outliers.
+
+Bouts of extreme weather are to be expected. Also we selected these stations as being odd.
+
+## Stations with consistent records.
+
+Lets filter our list down to stations that have a least 30 years of data where each year has at least 25% of days having an observation.
+
+```{r}
+
+consistent_year_cutoff <- 0.25
+
+rainfall_station_consistency  <- 
+    rainfall_good_summary %>%
+    unnest(Yearly) %>% 
+    mutate(Present_Ratio = N_Present / N) %>%
+    filter(N > 350, Present_Ratio > consistent_year_cutoff) %>% 
+    group_by(Zone, Station) %>% 
+    summarise(N_consistent = n())
+
+rainfall_consistency_summary <-
+    rainfall_complete_summary %>%
+    left_join(rainfall_station_consistency, by=c("Zone", "Station")) %>%
+    unnest(All) %>% 
+    mutate(N_Consistent = ifelse(!is.na(N_consistent), N_consistent, 0)) %>%
+    mutate(Present_Ratio = N_Present / N) %>%
+    select(
+        Zone, Station, Status, N_Year, N_Consistent, Min_Year, Max_Year, 
+        N, N_NA, N_Present, Present_Ratio)
+
+rainfall_consistent_station_codes <- rainfall_consistency_summary %>% filter(N_Consistent > 30) %>% pull(Station)
+
+rainfall_consistent_stations <- rainfall_complete_stations %>% filter(Station %in% rainfall_consistent_station_codes)
+
+rainfall_consistent_all_summary <- 
+    rainfall_complete_summary %>% 
+    inner_join(rainfall_consistent_stations, by = c("Zone","Station")) %>%
+    left_join(rainfall_station_consistency, by=c("Zone", "Station")) %>%
+    mutate(N_Consistent = ifelse(!is.na(N_consistent), N_consistent, 0)) %>%
+    unnest(All) %>% 
+    select(-Decadal, -Yearly) %>% 
+    mutate(Present_Ratio = N_Present / N) %>%
+    select(Zone, Station, Name, Latitude, Longitude, 
+           N_Year, N_Consistent, Min_Year, Max_Year,
+           N, N_NA, N_Present, Present_Ratio, Min, Mean, Max, FirstQ, Median, ThirdQ, SD, Skew)
+
+rainfall_consistent_all_summary
+```
+
+Yearly consistent summary
+
+```{r}
+
+rainfall_consistent_yearly_summary <- 
+    rainfall_complete_summary %>% 
+    inner_join(rainfall_consistent_stations, by = c("Zone","Station")) %>%
+    left_join(rainfall_station_consistency, by=c("Zone", "Station")) %>%
+    mutate(N_Consistent = ifelse(!is.na(N_consistent), N_consistent, 0)) %>%
+    unnest(Yearly) %>% 
+    mutate(Present_Ratio = N_Present / N) %>%
+    filter(N > 350, Present_Ratio > consistent_year_cutoff) %>% 
+    select(Zone, Station, Name, Latitude, Longitude, 
+           Year, N_Year, N_Consistent, Min_Year, Max_Year,
+           N, N_NA, N_Present, Present_Ratio, Min, Mean, Max, FirstQ, Median, ThirdQ, SD, Skew)
+
+rainfall_consistent_yearly_summary
+```
+
+## Consistent exploration
+
+Map of Log2 means
+
+```{r}
+rainfall_consistent_all_summary %>% 
+    aus_dark_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = log2(Mean))) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = 1)
+```
+
+I can see the rainfall by regions. You can see east of the great divde. Northern Australia, the deserts. Looking good.
+
+## Exploration over time
+
+Lets get a sample of consistent stations to explore.
+
+```{r}
+# Choose a selection of statistics used to select a sample
+consistent_sample_prep <- 
+    rainfall_consistent_all_summary %>% 
+    select(N_Year, N_Consistent, Min_Year, N, Present_Ratio, Min, Mean, Max, SD, Skew)
+
+# Center and scale all properties
+consistent_sample_prep <- recipe(consistent_sample_prep) %>% step_center(everything()) %>% step_scale(everything()) %>% prep(retain = TRUE) %>% juice()
+
+# Choose an initial random set of 5 and a further 15 records that have max disimilarity
+set.seed(103)
+consistent_sample_initial_idx <- sample(1:nrow(consistent_sample_prep), 5)
+consistent_sample_dissim_idx <- caret::maxDissim(consistent_sample_prep[consistent_sample_initial_idx,], consistent_sample_prep, n = 20, verbose = FALSE)
+
+consistent_sample_idx <- c(consistent_sample_initial_idx, consistent_sample_dissim_idx)
+
+consistent_sample_all_summary <- rainfall_consistent_all_summary[consistent_sample_idx,]
+consisten_sample_stations <- rainfall_complete_stations %>% filter(Station %in% consistent_sample_all_summary$Station)
+consistent_sample_yearly_summary <- rainfall_consistent_yearly_summary %>% filter(Station %in% consistent_sample_all_summary$Station)
+
+```
+
+### Number of Records per year
+
+```{r}
+consistent_sample_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = N)) + facet_wrap(~ Station)
+```
+
+We now tend to have more complete records.
+
+### Number of Observations per year
+
+```{r}
+consistent_sample_yearly_summary %>% ggplot() + geom_col(aes(x = Year, y = Present_Ratio)) + facet_wrap(~ Station)
+```
+
+Much more consistent presence ratio.
+
+### Mean per year
+
+```{r}
+consistent_sample_yearly_summary %>% filter(Station != "31141") %>% ggplot() + geom_col(aes(x = Year, y = Mean)) + facet_wrap(~ Station)
+```
+

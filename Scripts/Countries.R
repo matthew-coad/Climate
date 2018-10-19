@@ -1,0 +1,82 @@
+library(ggmap)
+
+country_datapath <- function(filename) climate_datapath(filename)
+
+country_centroids_data_path <- function() {
+    country_datapath("country_centroids_az8.csv")
+}
+
+load_country_centroids <- function() {
+    colTypes <- cols(
+        FID = col_character(),
+        the_geom = col_character(),
+        FID_ = col_integer(),
+        scalerank = col_integer(),
+        featurecla = col_character(),
+        labelrank = col_integer(),
+        sovereignt = col_character(),
+        sov_a3 = col_character(),
+        adm0_dif = col_integer(),
+        level = col_integer(),
+        type = col_character(),
+        admin = col_character(),
+        adm0_a3 = col_character(),
+        geou_dif = col_integer(),
+        geounit = col_character(),
+        gu_a3 = col_character(),
+        su_dif = col_integer(),
+        subunit = col_character(),
+        su_a3 = col_character(),
+        brk_diff = col_integer(),
+        name = col_character(),
+        name_long = col_character(),
+        brk_a3 = col_character(),
+        brk_name = col_character(),
+        brk_group = col_character(),
+        abbrev = col_character(),
+        postal = col_character(),
+        formal_en = col_character(),
+        formal_fr = col_character(),
+        note_adm0 = col_character(),
+        note_brk = col_character(),
+        name_sort = col_character(),
+        name_alt = col_character(),
+        mapcolor7 = col_integer(),
+        mapcolor8 = col_integer(),
+        mapcolor9 = col_integer(),
+        mapcolor13 = col_integer(),
+        pop_est = col_integer(),
+        gdp_md_est = col_double(),
+        pop_year = col_integer(),
+        lastcensus = col_integer(),
+        gdp_year = col_integer(),
+        economy = col_character(),
+        income_grp = col_character(),
+        wikipedia = col_integer(),
+        fips_10 = col_character(),
+        iso_a2 = col_character(),
+        iso_a3 = col_character(),
+        iso_n3 = col_character(),
+        un_a3 = col_character(),
+        wb_a2 = col_character(),
+        wb_a3 = col_character(),
+        woe_id = col_integer(),
+        adm0_a3_is = col_character(),
+        adm0_a3_us = col_character(),
+        adm0_a3_un = col_integer(),
+        adm0_a3_wb = col_integer(),
+        continent = col_character(),
+        region_un = col_character(),
+        subregion = col_character(),
+        region_wb = col_character(),
+        name_len = col_integer(),
+        long_len = col_integer(),
+        abbrev_len = col_integer(),
+        tiny = col_integer(),
+        homepart = col_integer(),
+        Longitude = col_double(),
+        Latitude = col_double()
+    )
+    read_csv(country_datapath("country_centroids_az8.csv"), col_types = colTypes)
+}
+

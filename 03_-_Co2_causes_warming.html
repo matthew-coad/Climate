@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+<meta name="author" content="Matthew Coad" />
+
+
+<title>03 - Global warming is caused by Co2 emissions</title>
+
+<script src="03_-_Co2_causes_warming_files/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="03_-_Co2_causes_warming_files/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="03_-_Co2_causes_warming_files/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="03_-_Co2_causes_warming_files/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="03_-_Co2_causes_warming_files/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="03_-_Co2_causes_warming_files/navigation-1.1/tabsets.js"></script>
+<link href="03_-_Co2_causes_warming_files/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="03_-_Co2_causes_warming_files/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">03 - Global warming is caused by Co2 emissions</h1>
+<h4 class="author"><em>Matthew Coad</em></h4>
+<h4 class="date"><em>6 September 2018</em></h4>
+
+</div>
+
+
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<p>In Part 1 and Part 2 of this series we took a look at the global temperature record and the global Co2 concentration and had a look at how they relate.</p>
+<p>In this article I’m going to check out the idea “The increase in global temperatures is largely caused by the increase in Co2 emissions”. There are limits to what we are going to be able to do with only two datasets at our disposal, but we can take it out round the block, kick the tires and see if it makes sense.</p>
+<p>As we look at more datasets in later articles we might revisit this road test and see if we can put its conclusions on firmer foundations.</p>
+<p>In Part 2 we discovered that it looks like the climate has undergone some dramatic shifts and I identified 3 periods I could see, the classic, transitional and modern periods.</p>
+<p>While knowing about the classic and transitional periods is useful, really we are interested in whats going on in the modern period. So to make things a bit easier we’ll refine the question to be a bit simpler:</p>
+<p>Is the increase in temperatures in the <em>modern</em> period caused by the increase in carbon dioxide concentration?</p>
+</div>
+<div id="first-some-groundwork" class="section level2">
+<h2>First some groundwork</h2>
+<p>To start we are going to need to make some assumptions.</p>
+<p>The first one is that the records we have downloaded so far are reasonably accurate. This means trusting the researchers that created them which conflicts with one of the original objectives of this series, which was to not rely on a appeal to authority. I’ve got some ideas on how to do some cross checking, but lets just see what we can with do with what we’ve got so far.</p>
+<p>The next assumption is that increase in carbon dioxide concentrations that started around 1800 A.D. were primarily caused by human activity. The story is that around 1800 the industrial revolution kicked into full swing. Across the world we started digging up coal and oil and started burning it in sufficient quantities to start changing the concentration of carbon dioxide in the atmosphere.</p>
+<p>From the previous assumption it follows that the change in carbon dioxide concentrations from the transitional period onward are <em>not</em> caused by changes in temperature.</p>
+<p>The final one is a bit tricky to explain. Its that over the long to medium term the temperature at future dates is independant of the temperature in the past. IE that we are assuming that the temperature isn’t going up <em>because</em> the temperature is going up. That there isn’t some feedback mechanism thats piling temperature increase on top of temperature increase. I think its a pretty good one to make because we saw how the temperature bumbled around a stable value during the classic period. It didn’t go zooming off in the past to the extent that it is now. Without this assumption we aren’t going to be able to make any conclusions one way or the other.</p>
+</div>
+<div id="data-sciencing-the-shit-out-of-it" class="section level2">
+<h2>Data sciencing the shit out of it</h2>
+<p>In order to establish cause and effect ideally we would like to do some experiments. In those experiments we keep as many of aspects of the thing we are studying constant while changing another aspect.</p>
+<p>From our ideas we make a prediction of what the result should be as a consequence of that change. Then we see if the results of the experiment match up with our predictions.</p>
+<p>However in the case of global warming there are a few issues with that. We only have one earth, we are pretty attached to it and getting the funding to make planetary changes is a bitch.</p>
+<p>But if we look back at the record maybe we can see times where the change we would like to test has already been made.</p>
+<p>We’ve already seen one example. When we started increasing the carbon dioxide concentration back in the 1800’s.</p>
+<p>But around that time the climate system seemed to really change in some sort of dramatic way. It would be really nice if we could hold that change constant and then see what happens if the carbon dioxide concentration changes.</p>
+<p>Lets redo that ‘Co2 and Temperature’ graph from part 2 and zoom in on the modern period.</p>
+<p><img src="03_-_Co2_causes_warming_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p>We can now see in more detail that dramatic zoom-up that occurred in the modern period. This lets us can see that the 1800’s wasn’t the only time that the trend in carbon dioxide concentrations changed. Carbon dioxide has been on the increase the whole time but that increase got even faster in the 1960’s. I’m guessing its because global industrialization lept up to a new level after world war 2. You can see that pick up in the pace as a “bend” in the graph.</p>
+<p>It almost looks like the carbon dioxide concentrations are some sort of smoothed trend line for temperature. And while the plots have been scaled so they line-up over each other on purpose, the scaling doesn’t effect the shape of that curve. This graph makes it pretty obvious that the increase in temperature and the increase in carbon dioxide concentrations have been in perfect lock-step.</p>
+</div>
+<div id="lies-damned-lies-and-statistics." class="section level2">
+<h2>Lies, damned lies and statistics.</h2>
+<p>In this series I’m trying to present things in a way that allow us to geniunely understand the issue “intuitively”. But to really hit things home I’d like to do a statistical test that hopefully puts things on a firmer footing. Unfortunately understanding these statistical tests requires some detailed technical knowledge so unless you’ve done the right courses I’m going to have to ask you to trust me a bit.</p>
+<p>However even if you don’t have a background in statistics you can see how the two datasets line up. These statistics just put some firm numbers around the natural intuition that the graph says something meaningful.</p>
+<p>Lets repeat a graph we’ve already seen in Part 2. The graph of temperature vs carbon dioxide concentrations for the modern period. Because its relevant lets show it again, but unleash some machine learning goodness. The grand-daddy of them all, linear regression.</p>
+<p><img src="03_-_Co2_causes_warming_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p>One of the neat things about machine learning algorithms is that you control what you tell them, so you can get them to “forget” about things you know on your behalf. This helps us be sure your we aren’t being predjudiced by our prior experience.</p>
+<p>Prior to generating this graph I asked the machine to try to predict what the temperature anamoly should be given a carbon dioxide concentration. And when I did this I told it nothing about about time. It only knows about the yearly temperature and carbon dioxide concentration measurments, not when they occured.</p>
+<p>Then I added that prediction to the graph as a blue line. You can see those predictions running right through the middle of the graph. By crunching a lot of numbers and doing a lot of math the machine has found the line that all the dots seem to imply.</p>
+<p>We probably could have drawn the same line ourselves. But because we got the machine to do it we get some useful numbers. From between 1900 A.D. and the present day:</p>
+<ul>
+<li>Whenever the carbon concentration in parts per million has increased by one, the average temperatures across the world have increased by 0.01 degrees.<br />
+</li>
+<li>To be more specific, the machine is 95% confident that the increase is between 0.0098 and 0.0111.</li>
+<li>The probability that the linear relationship the machine found is by pure chance is less than 0.0000000000000001%.</li>
+<li>The prediction explains 87% of the variation in temperature.</li>
+</ul>
+<p>To me this is pretty amazing. Countless temperature and carbon dioxide measurements by many thousands of dedicated people, taken over the course of a hundred years, in cities, in the country, in the tropics, in the artic and antartic, from over the land and the oceans. And in the end we get this straight line.</p>
+<p>That straight line is <em>saying</em> something.</p>
+</div>
+<div id="correlation-is-not-causation-so-they-say." class="section level2">
+<h2>Correlation is not causation, so they say.</h2>
+<p>That is true. But it is a powerful piece of evidence. Our intuitions and statistics say <em>something</em> is afoot.</p>
+<p>There are several possibilites.</p>
+<p>One is that the increase in carbon dioxide concentration is caused by the change in temperature. But thats eliminated by our assumptions.</p>
+<p>Next is the flip-side, that the increase in temperature is caused by changes in carbon dioxide concentration. Thats the idea we are road testing so it lines up.</p>
+<p>It could be caused by whats called a <em>confounding variable</em>. Its possible that temperature and carbon dioxide are rising due to some other effect that we aren’t taking into account in our analysis.</p>
+<p>One suggestion that I’ve heard is the “heat island effect” of cities. That idea is that the average temperature is going up because cities are hotter than the country. And if we have bigger cities we need to burn more fossil fuels to match.</p>
+<p>But you need to find something that matches all the evidence we have. It needs to explain how the temperature bumbled around for ages up then shot up. It needs to explain why the temperature and carbon dioxide concentrations are so in lock-step. That straight line is going to be <em>very</em> hard to beat.</p>
+</div>
+<div id="conclusion" class="section level2">
+<h2>Conclusion</h2>
+<p>The evidence we’ve looked at in this article is perfectly in line with the idea that we are road testing, that the increase in temperatures in the modern period is caused by the increase in carbon dioxide concentration.</p>
+<p>The rate of temperature change has changed. The rate of carbon dioxide concentration change has changed, but the two are just staying in lock step. Even the machine say so.</p>
+<p>Great styling, nice pick-up, feels rock-steady in traffic and out on the highway. But we’ve only just started cruising the lot so maybe we can find something better. 4.5 Stars.</p>
+</div>
+<div id="data-sources" class="section level2">
+<h2>Data Sources</h2>
+<div id="gistemp" class="section level3">
+<h3>GISTEMP</h3>
+<p>GISTEMP Team, 2018: GISS Surface Temperature Analysis (GISTEMP). NASA Goddard Institute for Space Studies.</p>
+<p>Dataset accessed 2018-09-03 at <a href="https://data.giss.nasa.gov/gistemp/" class="uri">https://data.giss.nasa.gov/gistemp/</a>.</p>
+</div>
+<div id="nvhnt" class="section level3">
+<h3>NVHNT</h3>
+<p>Northern Hemisphere temperatures reconstructed by statistically combining long-term fluctuations recorded by 11 low-resolution proxy series (lake and ocean sediments, ice cores, stalagmites) and short- term variations recorded by 7 tree-rings series. The reconstruction was calibrated by matching its mean and variance to the instrumental record of Northern Hemisphere annual mean temperature over the period of overlap (CE 1856-1979).</p>
+<p>Credits: Moberg, A., D.M. Sonechkin, K. Holmgren, N.M. Datsenko, and W. Karlén. 2005. Highly variable Northern Hemisphere temperatures reconstructed from low- and high-resolution proxy data. Nature, Vol. 433, pp. 613-617.</p>
+<p>Dataset accessed 2018-09-03 at <a href="http://www.temperaturerecord.org/" class="uri">http://www.temperaturerecord.org/</a>.</p>
+</div>
+<div id="iac" class="section level3">
+<h3>IAC</h3>
+<p>Institute for Atmospheric and Climate Science (IAC) at Eidgenössische Technische Hochschule in Zürich, Switzerland.</p>
+<p>Dataset accessed 2018-09-03 at <a href="https://www.co2.earth/historical-co2-datasets">Historical CO2 Datasets</a>.</p>
+</div>
+<div id="mauna" class="section level3">
+<h3>MAUNA</h3>
+<p>C. D. Keeling, S. C. Piper, R. B. Bacastow, M. Wahlen, T. P. Whorf, M. Heimann, and H. A. Meijer, Exchanges of atmospheric CO2 and 13CO2 with the terrestrial biosphere and oceans from 1978 to 2000. I. Global aspects, SIO Reference Series, No. 01-06, Scripps Institution of Oceanography, San Diego, 88 pages, 2001.</p>
+<p>Dataset accessed 2018-09-03 at <a href="https://www.co2.earth/historical-co2-datasets">Historical CO2 Datasets</a></p>
+</div>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
