@@ -1,0 +1,380 @@
+---
+title: "Rainfall by quartile exploration"
+output: html_notebook
+---
+
+Exploration into analysing rainfall by dividing counts into quartiles.
+
+Rainfall is highly variable, even in one location. Trying to analyse it on the basis of some sort of continuous range doesn't give a clear picture of whats going on.
+
+Here we explore dividing rainfall into bins and seeing what we can see.
+
+# Initialization
+
+```{r message=FALSE}
+
+library(knitr)
+
+source("./Scripts/Settings.R")
+source("./Scripts/AusWeather.R")
+source("./Scripts/AusClimate.R")
+source("./Scripts/AusMaps.R")
+source("./Scripts/Utility.R")
+
+```
+
+## Load Data
+
+```{r}
+
+# Evaluation Settings
+
+# Base start major period
+baseline_start <- 1950
+# Baseline end major period
+baseline_end <- 2018
+# Number of required clean years
+clean_years <- 65
+# Major period quosure
+major_period <- aus_year_period()
+# Minor period quosure
+minor_period <- aus_monthly_period()
+# Number of quartiles to use
+n_quantile <- 11
+quantile_offset <- ceiling(n_quantile/ 2)
+# Center evaluation sequecne
+evaluate_centers <- 4:10
+
+valuation_info <- aus_rainfall_valuation_info
+valuation_info$baseline_start <- baseline_start
+valuation_info$baseline_end <- baseline_end
+valuation_info$clean_years <- clean_years
+
+baseline_stations <- aus_baseline_stations(valuation_info)
+
+load_data <- function() {
+    message("Loading Observations")
+    observations <- aus_clean_observations(baseline_stations$Station, aus_rainfall_clean_info)
+    list(
+        observations = observations
+    )
+}
+
+memorised_data <- aus_memorise(load_data, aus_rainfall_observations_info, paste0("RainfallBins v", aus_rainfall_version, " base from ", baseline_start, " to ", baseline_end, " min ", clean_years))
+
+stations <- baseline_stations
+observations <- memorised_data$observations
+observation_info <- aus_rainfall_observations_info
+observations
+```
+
+## Observations per period
+
+```{r}
+
+incomplete_period_observations <-
+    observations %>% 
+    mutate(Major_Period = !! major_period, Minor_Period = !! minor_period) %>%
+    group_by(Zone, Station, Major_Period, Minor_Period) %>%
+    summarise(
+        Rainfall = sum(Rainfall, na.rm = TRUE),
+        Rainfall.Source = first(Rainfall.Source)
+    ) %>%
+    ungroup() %>%
+    arrange(Zone, Station, Major_Period, Minor_Period)
+
+period_summary <-
+    incomplete_period_observations %>% 
+    group_by(Zone, Station, Minor_Period) %>%
+    summarise(
+        Rainfall.Mean = mean(Rainfall, na.rm = TRUE),
+        Rainfall.Median = median(Rainfall, na.rm = TRUE),
+        Rainfall.Min = min(Rainfall, na.rm = TRUE),
+        Rainfall.Max = max(Rainfall, na.rm = TRUE),
+        Rainfall.IQR = IQR(Rainfall, na.rm = TRUE)
+    )
+
+period_observations <-
+    incomplete_period_observations %>% 
+    group_by(Zone, Station) %>%
+    complete(Major_Period = full_seq(Major_Period, 1), Minor_Period = 1:12) %>%
+    ungroup() %>%
+    inner_join(period_summary, by = c("Zone", "Station", "Minor_Period")) %>%
+    mutate(
+        Rainfall.Original = Rainfall,
+        Rainfall = if_else(!is.na(Rainfall.Original), Rainfall.Original, Rainfall.Median)) %>%
+    select(Zone, Station, Major_Period, Minor_Period, Rainfall, Rainfall.Original, Rainfall.Source) %>%
+    arrange(Zone, Station, Major_Period, Minor_Period) %>%
+    mutate(
+        Rainfall.L3 = Rainfall + lag(Rainfall, 1) + lag(Rainfall, 2),
+        Rainfall.L6 = Rainfall.L3 + lag(Rainfall, 3) + lag(Rainfall, 4) + lag(Rainfall, 5),
+        Rainfall.L12 = Rainfall.L6 + lag(Rainfall, 6) + lag(Rainfall, 7) + lag(Rainfall, 8) + 
+            lag(Rainfall, 9) + lag(Rainfall, 10)  + lag(Rainfall, 11),
+        Rainfall.L24 = 
+            Rainfall.L12 + 
+            lag(Rainfall, 12) + lag(Rainfall, 13) + lag(Rainfall, 14) + lag(Rainfall, 15) + lag(Rainfall, 16) + lag(Rainfall, 17) + 
+            lag(Rainfall, 18) + lag(Rainfall, 19) + lag(Rainfall, 20) + lag(Rainfall, 21) + lag(Rainfall, 22) + lag(Rainfall, 23) 
+    )
+period_observations
+```
+
+## Baselines
+
+```{r}
+
+# Make an open ended quantile by setting the first break to zero and the last break to infinity
+open_quantile <- function(x) {
+    x[1] <- 0
+    x[length(x)] <- Inf
+    x
+}
+
+# For all period observations in the baseline period work out summar stats for the current 3, 12 and 24 months
+baselines <-
+    period_observations %>% 
+    filter(Major_Period >= baseline_start, Major_Period <= baseline_end) %>%
+    group_by(Zone, Station, Minor_Period) %>%
+    summarise(
+        Rainfall.Max = max(Rainfall),
+        Rainfall.Min = min(Rainfall),
+        Rainfall.1st = quantile(Rainfall, 0.25),
+        Rainfall.Median = median(Rainfall),
+        Rainfall.3rd = quantile(Rainfall, 0.75),
+        Rainfall.Quantiles = list(quantile(Rainfall, (0:n_quantile) / n_quantile, na.rm = TRUE)),
+        Rainfall.OpenQuantiles = list(open_quantile(quantile(Rainfall, (0:n_quantile) / n_quantile, na.rm = TRUE))),
+        
+        Rainfall.L3.Max = max(Rainfall.L3),
+        Rainfall.L3.Min = min(Rainfall.L3),
+        Rainfall.L3.1st = quantile(Rainfall.L3, 0.25),
+        Rainfall.L3.Median = median(Rainfall.L3),
+        Rainfall.L3.3rd = quantile(Rainfall.L3, 0.75),
+        Rainfall.L3.Quantiles = list(quantile(Rainfall.L3, (0:n_quantile) / n_quantile, na.rm = TRUE)),
+        Rainfall.L3.OpenQuantiles = list(open_quantile(quantile(Rainfall.L3, (0:n_quantile) / n_quantile, na.rm = TRUE))),
+        
+        Rainfall.L12.Max = max(Rainfall.L12),
+        Rainfall.L12.Min = min(Rainfall.L12),
+        Rainfall.L12.1st = quantile(Rainfall.L12, 0.25),
+        Rainfall.L12.Median = median(Rainfall.L12),
+        Rainfall.L12.3rd = quantile(Rainfall.L12, 0.75),
+        Rainfall.L12.Quantiles = list(quantile(Rainfall.L12, (0:n_quantile) / n_quantile, na.rm = TRUE)),
+        Rainfall.L12.OpenQuantiles = list(open_quantile(quantile(Rainfall.L12, (0:n_quantile) / n_quantile, na.rm = TRUE))),
+        
+        Rainfall.L24.Max = max(Rainfall.L24),
+        Rainfall.L24.Min = min(Rainfall.L24),
+        Rainfall.L24.1st = quantile(Rainfall.L24, 0.25),
+        Rainfall.L24.Median = median(Rainfall.L24),
+        Rainfall.L24.3rd = quantile(Rainfall.L24, 0.75),
+        Rainfall.L24.Quantiles = list(quantile(Rainfall.L24, (0:n_quantile) / n_quantile, na.rm = TRUE)),
+        Rainfall.L24.OpenQuantiles = list(open_quantile(quantile(Rainfall.L24, (0:n_quantile) / n_quantile, na.rm = TRUE)))
+
+    ) 
+baselines
+```
+
+## Valuations
+
+```{r}
+
+valuations <-
+    period_observations %>% 
+    group_by(Zone, Station, Minor_Period) %>%
+    inner_join(baselines, by=c("Zone", "Station", "Minor_Period")) %>%
+    mutate(Date = make_date(Major_Period, Minor_Period)) %>%
+    mutate(Rainfall.Rating = findInterval(Rainfall, first(Rainfall.OpenQuantiles)) - quantile_offset) %>%
+    mutate(Rainfall.L3.Rating = findInterval(Rainfall.L3, first(Rainfall.L3.OpenQuantiles)) - quantile_offset) %>%
+    mutate(Rainfall.L12.Rating = findInterval(Rainfall.L12, first(Rainfall.L12.OpenQuantiles)) - quantile_offset) %>%
+    mutate(Rainfall.L24.Rating = findInterval(Rainfall.L24, first(Rainfall.L24.OpenQuantiles)) - quantile_offset) %>%
+    ungroup() %>%
+    select(
+        Zone, Station, Major_Period, Minor_Period, Date,
+        Rainfall.L12.Median,
+        Rainfall, Rainfall.Rating,
+        Rainfall.L3, Rainfall.L3.Rating,
+        Rainfall.L12, Rainfall.L12.Rating,
+        Rainfall.L24, Rainfall.L24.Rating, 
+        Rainfall.Source)
+valuations
+
+```
+
+## Rating plots
+
+Plot a map of australia wide rainfall ratings
+
+```{r}
+selected_major_period <- 1970
+selected_variable <- quo(Rainfall.L12.Rating)
+
+for (selected_minor_period in 1:12) {
+    plot(
+        valuations %>%
+        filter(Major_Period == selected_major_period, Minor_Period == selected_minor_period) %>%
+        inner_join(stations, by = c("Zone", "Station")) %>%
+        ggplot() %>%
+        aus_dark_map() + 
+        geom_point(aes(x = Longitude, y = Latitude, color = !! selected_variable)) +
+        scale_colour_distiller(type = "div", palette="RdBu", direction = 1)) +
+        ggtitle(paste0("Minor_Period = ", selected_minor_period))
+}
+
+```
+
+
+# Regions
+
+## Generate Options
+
+```{r}
+
+# Region generation options
+region_baseline_start <- 2000
+region_baseline_years <- 10
+region_baseline_minor_period <- 12
+distance_scale <- 3
+region_baseline_end <- region_baseline_start + region_baseline_years - 1
+
+# Spread the rainfall quantile during the baseline period into a row per station
+region_valuations <-
+    valuations %>% 
+    filter(Major_Period >= region_baseline_start, Major_Period <= region_baseline_end, Minor_Period == region_baseline_minor_period) %>%
+    inner_join(stations, by=c("Zone", "Station")) %>%
+    mutate(Latitude = scale(Latitude) * distance_scale, Longitude = scale(Longitude) * distance_scale) %>%
+    mutate(Rating_Value = scale(Rainfall.L3)) %>%
+    select(Zone, Station, Latitude, Longitude, Rainfall = Major_Period, Rating_Value) %>% 
+    spread(key = Rainfall, value = Rating_Value, sep = ".") %>%
+    ungroup()
+    
+# Function that evaluates regions for a given number of Kmeans centers
+regions_for_centers <- function(centers) {
+    region_kmeans <- region_valuations %>% select(-Zone, -Station) %>% kmeans(centers)
+    r <- region_valuations
+    r$Centers <- centers
+    r$RegionID <- region_kmeans$cluster
+    r <- r %>% select(Zone, Station, Centers, RegionID)
+    r
+}
+
+regions_by_centers <- evaluate_centers %>% map_dfr(regions_for_centers)
+regions_by_centers
+
+```
+
+## Explore Options
+
+Plot map of regions for each center
+
+```{r}
+
+for (center in evaluate_centers) {
+    plot(regions_by_centers %>%
+        inner_join(stations, by = c("Zone", "Station")) %>%
+        filter(Centers == center) %>%
+        ggplot() %>%
+        aus_dark_map() + 
+        geom_point(aes(x = Longitude, y = Latitude, color = RegionID)) +
+        scale_colour_distiller(type = "div", palette="RdBu") +
+        guides(colour=FALSE) +
+        ggtitle(paste0("Centers = ", center)))
+}
+
+
+```
+
+6 picks out Vic, NSW, Queensland/outback and wester AUS.
+
+## Complete
+
+```{r}
+region_centers <- 7
+station_regions <- 
+    regions_by_centers %>% 
+    filter(Centers == region_centers) %>% 
+    select(Zone, Station, RegionID)
+
+# Determine median longitude for each region
+regionIDs <- station_regions %>%
+    inner_join(stations, by = c("Zone", "Station")) %>%
+    group_by(RegionID) %>%
+    summarise(Median.Longitude = median(Longitude)) %>%
+    ungroup() %>%
+    arrange(Median.Longitude) %>%
+    pull(RegionID)
+
+region_valuations <- 
+    valuations %>% 
+    inner_join(station_regions, by = c("Zone", "Station")) %>% 
+    select(Zone, Station, RegionID, everything())
+region_valuations
+
+```
+
+## Plot ratio of stations in Drought
+
+```{r, fig.asp = 1}
+
+# start_period <- baseline_start
+start_period <- 1950
+end_period <- 2020
+minor_period <- 12
+
+layout <- rbind(c(1,1),
+             c(2,3))
+
+for (regionID in regionIDs) {
+    
+    df <- 
+        region_valuations %>%
+        filter(RegionID == regionID) %>%
+        filter(Major_Period >= start_period, Major_Period <= end_period)
+    df_summary <- 
+        df  %>%
+        group_by(Date) %>%
+        summarise(Rainfall.L12.Median = median(Rainfall.L12))
+
+    gridExtra::grid.arrange(
+        
+        df_summary %>%
+            ggplot(aes(x = Date, y = Rainfall.L12.Median)) +
+            geom_line(color = "grey30") +
+            geom_smooth(formula = y ~ x, method = "lm", color = "blue", se = FALSE) +
+            labs(
+                x = "Year",
+                y = "Rainfall for last 12 months (mm)"
+            ) +
+            theme_bw(),
+        
+        stations %>%
+            inner_join(regions, by = c("Zone", "Station")) %>%
+            filter(RegionID == regionID) %>%
+            ggplot() %>%
+            aus_map() + 
+            geom_point(aes(x = Longitude, y = Latitude), size = 1) +
+            guides(colour=FALSE) +
+            labs(
+                x = "Longitude",
+                y = "Latitude"
+            ) +
+            theme_bw(),
+        
+        df %>%
+            filter(Minor_Period == minor_period) %>%
+            ggplot(aes(x = Date, y = Rainfall.L12)) +
+            geom_point(aes(color = Station), alpha = .25, size = .75) +
+            guides(colour=FALSE) + 
+            coord_cartesian(ylim = c(0, 2000)) +
+            labs(
+                x = "Year",
+                y = "Rainfall (mm)"
+            ) +
+            theme_bw(),
+
+        layout_matrix = layout,
+        heights= c(2,1)
+    )
+}
+
+
+```
+
+
+

@@ -1,0 +1,353 @@
+---
+title: "Australian Climate - Rainfall Regions"
+output: html_notebook
+---
+
+Exploration into trying to detect climate regions using the rainfall data.
+
+# Initialization
+
+```{r message=FALSE}
+
+library(knitr)
+
+source("./Scripts/Settings.R")
+source("./Scripts/AusWeather.R")
+source("./Scripts/AusClimate.R")
+source("./Scripts/AusMaps.R")
+source("./Scripts/Utility.R")
+
+```
+
+## Load rainfall valuations
+
+```{r}
+
+regional_valuations <- function() {
+    message("Evaluating Baseline Stations")
+    baseline_stations <- aus_baseline_stations(aus_rainfall_valuation_info)
+    message("Loading Observations")
+    observations <- aus_clean_observations(baseline_stations$Station, aus_rainfall_clean_info)
+    message("Evaluating Baselines")
+    baselines <- aus_valuation_baselines(observations, aus_rainfall_valuation_info)
+    message("Evaluating Valuations")
+    valuations <- aus_valuations(observations, aus_rainfall_valuation_info, baselines = baselines)
+    message("Evaluation Complete")
+    list(
+        stations = baseline_stations,
+        observations = observations,
+        baselines = baselines,
+        valuations = valuations
+    )
+}
+
+memorised_regional_valuations <- aus_memorise(regional_valuations, aus_rainfall_observations_info,
+                                              paste0("RainRegionsValuations v", aus_rainfall_version))
+
+stations <- memorised_regional_valuations$stations
+observations <- memorised_regional_valuations$observations
+baselines <- memorised_regional_valuations$baselines
+valuations <- memorised_regional_valuations$valuations
+
+```
+
+# Regional Exploration
+
+## Baseline
+
+Plot a map of australia wide rainfall baselines for each month
+
+```{r}
+
+baselines %>%
+    inner_join(stations, by = c("Zone", "Station")) %>%
+    ggplot() %>%
+    aus_dark_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = log(Baseline.Mean)), size = 0.1) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = 1) +
+    guides(colour=FALSE) +
+    facet_wrap(~ Minor_Period)
+
+    
+```
+
+Try using kmeans to try to detect regions with similar variation.
+
+
+## Anaomly Map
+
+Plot a map of australia wide rainfall anamolies for a series of years.
+
+```{r}
+
+valuations %>%
+    filter(Major_Period >= 2010, Major_Period <= 2015, Minor_Period == 1) %>%
+    inner_join(stations, by = c("Zone", "Station")) %>%
+    ggplot() %>%
+    aus_dark_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = Rainfall.Anamoly), size = 0.1) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = 1) +
+    guides(colour=FALSE) +
+    facet_wrap(~ Major_Period)
+
+```
+
+It looks like anamolies occur in distinct regions. And its quite easy to see.
+
+Try using kmeans to try to detect regions that vary together. Also could use correlation. The corclust method in the klaR package can be used to detect clusters.
+
+# Try Regional Clustering
+
+Try finding clusters using baseline rainfalls. Spread the monthly rainfalls into columns
+
+
+```{r}
+
+station_rainfall_means <- baselines %>% 
+    select(Zone, Station, Rainfall.Mean = Minor_Period, Baseline.Mean) %>% 
+    spread(key = Rainfall.Mean, value = Baseline.Mean, sep = ".") %>%
+    ungroup()
+
+station_rainfall_sds <- baselines %>% 
+    select(Zone, Station, Rainfall.SD = Minor_Period, Baseline.SD) %>% 
+    spread(key = Rainfall.SD, value = Baseline.SD, sep = ".") %>%
+    ungroup()
+
+station_rainfall <- station_rainfall_means %>% inner_join(station_rainfall_sds, by = c("Zone", "Station"))
+station_rainfall
+
+
+```
+
+## Group stations by means
+
+```{r}
+
+station_centers_mean_groups <- function(centers) {
+    station_kmeans <- station_rainfall_means %>% select(-Zone, -Station) %>% kmeans(centers)
+    station_rainfall_means$Centers <- centers
+    station_rainfall_means$Group <- station_kmeans$cluster
+    station_rainfall_means
+}
+
+centers <- 4:20
+station_rainfall_mean_by_centers <- centers %>% map_dfr(station_centers_mean_groups)
+
+for (center in centers) {
+    p <- station_rainfall_mean_by_centers %>%
+        inner_join(stations, by = c("Zone", "Station")) %>%
+        filter(Centers == center) %>%
+        ggplot() %>%
+        aus_dark_map() + 
+        geom_point(aes(x = Longitude, y = Latitude, color = Group)) +
+        scale_colour_distiller(type = "div", palette="RdBu") +
+        guides(colour=FALSE) +
+        ggtitle(paste0("Centers = ", center))
+    print(p)
+}
+
+```
+
+
+## Group stations by sds
+
+```{r}
+
+station_centers_sd_groups <- function(centers) {
+    station_kmeans <- station_rainfall_sds %>% select(-Zone, -Station) %>% kmeans(centers)
+    station_rainfall_sds$Centers <- centers
+    station_rainfall_sds$Group <- station_kmeans$cluster
+    station_rainfall_sds
+}
+
+centers <- 4:20
+station_rainfall_sd_by_centers <- centers %>% map_dfr(station_centers_sd_groups)
+
+for (center in centers) {
+    p <- station_rainfall_sd_by_centers %>%
+        inner_join(stations, by = c("Zone", "Station")) %>%
+        filter(Centers == center) %>%
+        ggplot() %>%
+        aus_dark_map() + 
+        geom_point(aes(x = Longitude, y = Latitude, color = Group)) +
+        scale_colour_distiller(type = "div", palette="RdBu") +
+        guides(colour=FALSE)
+    print(p)
+}
+
+```
+
+## Regional Grouping Conclusion
+
+SDs alone it not so distinct and the algor has trouble. Use just the means so their is no issue in getting values on the same scale.
+
+Finds group with similar rainfall distributions. Picks out the arid regions, coast regions and so one.
+
+However tends to do things like group areas on the east and west coast of Aus which I know tend to vary seperately.
+
+10 Centers looks about nice. It picks out the areas that are in drought right now.
+
+Save as station_regional_clusters
+
+```{r}
+
+station_regional_clusters <- station_rainfall_means %>% 
+    select(-Zone, -Station) %>% 
+    kmeans(10)
+station_regions <- station_rainfall_means
+station_regions$RegionID <- station_regional_clusters$cluster
+station_regions <- station_regions %>% select(Zone, Station, RegionID, everything())
+
+stations %>%
+    inner_join(station_regions, by = c("Zone", "Station")) %>%
+    ggplot() %>%
+    aus_dark_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = RegionID))  +
+    scale_colour_distiller(type = "div", palette="RdBu")
+
+
+```
+
+## Regional Group Anamoly
+
+Generate anamoly grouped by regions
+
+### Combined plot
+
+```{r}
+
+plot(valuations %>%
+    inner_join(stations, by = c("Zone", "Station")) %>%
+    inner_join(station_regions, by = c("Zone", "Station")) %>%
+    filter(Major_Period > 1900) %>%
+    group_by(RegionID, Median_Date) %>%
+    summarise(Rainfall.Anamoly = mean(Rainfall.Anamoly)) %>%
+    ggplot(aes(x = Median_Date, y = Rainfall.Anamoly)) +
+    geom_line(color="lightgrey") +
+    geom_smooth(method = "loess", formula = y ~ x, span = .1) +
+    facet_wrap(~ RegionID) + ylim(-1, 1))
+
+```
+
+### Paged Plot
+
+```{r}
+
+for (regionID in 1:10) {
+    
+    gridExtra::grid.arrange(
+        stations %>%
+            inner_join(station_regions, by = c("Zone", "Station")) %>%
+            filter(RegionID == regionID) %>%
+            ggplot() %>%
+            aus_dark_map() + 
+            geom_point(aes(x = Longitude, y = Latitude)) +
+            guides(colour=FALSE),
+        
+        valuations %>%
+            inner_join(stations, by = c("Zone", "Station")) %>%
+            inner_join(station_regions, by = c("Zone", "Station")) %>%
+            filter(RegionID == regionID) %>%
+            filter(Major_Period > 1900) %>%
+            group_by(Median_Date) %>%
+            summarise(Rainfall.Anamoly = mean(Rainfall.Anamoly)) %>%
+            ggplot(aes(x = Median_Date, y = Rainfall.Anamoly)) +
+            geom_line(color="grey") +
+            geom_smooth(method = "loess", formula = y ~ x, span = .2) +
+             ylim(-1, 1),
+        
+        ncol = 2
+    )
+}
+
+
+```
+
+## Climate Grouping Conclusion
+
+It sorta works. You can see the major drought in eastern australia. However some areas are associated that probably shouldn't be.
+
+# Try Correlative Clustering
+
+Cluster stations that tend to vary together.
+
+Try kmeans to start cos its easy!
+
+Try spreading all periods during the baseline period into one set and use kmeans to group stations.
+
+```{r}
+station_rainfall_anamoly <- valuations %>% 
+    filter(Major_Period >= aus_baseline_start, Major_Period <= aus_baseline_end) %>%
+    mutate(Baseline_Period = (Major_Period - aus_baseline_start) * 12 + Minor_Period) %>%
+    select(Zone, Station, Anamoly = Baseline_Period, Rainfall.Anamoly) %>% 
+    spread(key = Anamoly, value = Rainfall.Anamoly, sep = ".") %>%
+    ungroup()
+```
+
+## Group stations by anamoly
+
+```{r}
+
+station_rainfall_anamoly_clusters <- function(centers) {
+    station_kmeans <- station_rainfall_anamoly %>% select(-Zone, -Station) %>% kmeans(centers)
+    r <- station_rainfall_anamoly
+    r$Centers <- centers
+    r$RegionID <- station_kmeans$cluster
+    r <- r %>% select(Zone, Station, Centers, RegionID)
+    r
+}
+
+anaomly_centers <- 4:30
+station_rainfall_anamoly_centers <- anaomly_centers %>% map_dfr(station_rainfall_anamoly_clusters)
+
+for (center in anaomly_centers) {
+    plot(station_rainfall_anamoly_centers %>%
+        inner_join(stations, by = c("Zone", "Station")) %>%
+        filter(Centers == center) %>%
+        ggplot() %>%
+        aus_dark_map() + 
+        geom_point(aes(x = Longitude, y = Latitude, color = RegionID)) +
+        scale_colour_distiller(type = "div", palette="RdBu") +
+        guides(colour=FALSE) +
+        ggtitle(paste0("Centers = ", center)))
+}
+
+```
+
+### Paged Plot
+
+```{r}
+
+selected_anaomly_centers <- 15
+selected_station_rainfall_anamoly <- station_rainfall_anamoly_centers %>% filter(Centers == selected_anaomly_centers)
+selected_anaomly_start <- 1950
+selected_anaomly_end <- 2018
+
+for (regionID in 1:selected_anaomly_centers) {
+    
+    gridExtra::grid.arrange(
+        stations %>%
+            inner_join(selected_station_rainfall_anamoly, by = c("Zone", "Station")) %>%
+            filter(RegionID == regionID) %>%
+            ggplot() %>%
+            aus_dark_map() + 
+            geom_point(aes(x = Longitude, y = Latitude)) +
+            guides(colour=FALSE),
+        
+        valuations %>%
+            inner_join(stations, by = c("Zone", "Station")) %>%
+            inner_join(selected_station_rainfall_anamoly, by = c("Zone", "Station")) %>%
+            filter(RegionID == regionID) %>%
+            filter(Major_Period >= selected_anaomly_start, Major_Period <= selected_anaomly_end) %>%
+            group_by(Median_Date) %>%
+            summarise(Rainfall.Anamoly = mean(Rainfall.Anamoly)) %>%
+            ggplot(aes(x = Median_Date, y = Rainfall.Anamoly)) +
+            geom_line(color="grey") +
+            geom_smooth(method = "loess", formula = y ~ x, span = .1),
+        
+        ncol = 2
+    )
+}
+
+
+```

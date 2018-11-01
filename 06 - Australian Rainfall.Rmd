@@ -1,0 +1,322 @@
+---
+title: "Discovering Climate Change - Australian Rainfall"
+author: "Matthew Coad"
+date: "1 November 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+
+knitr::opts_chunk$set(echo = FALSE)
+
+source("./Scripts/Settings.R")
+source("./Scripts/AusWeather.R")
+source("./Scripts/AusClimate.R")
+source("./Scripts/AusMaps.r")
+source("./Scripts/AusRainfall.r")
+source("./Scripts/Utility.R")
+
+```
+
+# Introduction
+
+```{r Load Rainfall Analysis, message = FALSE, warnings = FALSE}
+
+# Analysis period
+baseline_start <- 1950
+baseline_end <- 2017
+n_quantile <- 11
+
+
+# Minimum number of years of data
+# Allow stations to drop out for a few years
+clean_years <- baseline_end - baseline_start - 2
+
+# Load the data
+rainfall_data <- aus_memorised_rainfall_data(baseline_start, baseline_end, clean_years)
+stations <- rainfall_data$stations
+observations <- rainfall_data$observations
+monthly_observations <- aus_rainfall_monthly_observations(observations)
+baselines <- aus_rainfall_baselines(monthly_observations, baseline_start, baseline_end, n_quantile)
+monthly_valuations <- aus_rainfall_monthly_valuations(monthly_observations, baselines, n_quantile)
+regions <- aus_rainfall_regions(stations, monthly_valuations, 2000, 10, 12, 3, 7)
+
+
+```
+
+In my prior article I had a look at the Australian Temperature record. When I collected the data for that article from the Australian Beaureu of Meterology I also grabbed the rainfall data. Given that large parts of Eastern Australia are now in drought again it seems natural to follow up my prior article with a look at the rainfall data to see if and how its changing.
+
+Given that I had already developed a bunch of code to do the temperature analysis adapting it to do the rainfall analysis should be a doddle.
+
+## But oh the hubris of that!
+
+```{r Load Station Analysis, message = FALSE}
+
+all_stations <- aus_load_stations(aus_rainfall_station_info)
+station_clean_summary <- aus_observation_clean_summary(all_stations$Station, aus_rainfall_clean_info)
+```
+
+Getting on top of the rainfall data and getting it to the stage where I could tell a climate change story about it was *way* tougher than for the temperature data.
+
+For a start their is a lot more of it. In total something like half a billion observations from seventeen thousand recording stations over 150 years. However *more* isnt neccesarily better. I've got a pretty beefy computer but it would choke trying to load all that data. 
+
+Also the quality of the data was highly variable. Some stations had a very consistent record over many years. But some had recorded an observation for a tiny fraction of days. None had a complete record for the time they were active. Some dropped out for years at a time and started recording again.
+
+The following plot shows all those weather stations and how many years of complete data they had.
+
+```{r, message = FALSE}
+station_clean_summary %>%
+    filter(!is.na(Clean_Years)) %>%
+    ggplot() %>%
+    aus_dark_map() +
+    geom_point(aes(x = Longitude, y = Latitude, color = Clean_Years), size = .5, na.rm = TRUE) +
+    scale_colour_distiller(name = "Complete Years", type = "div", palette="RdBu", direction = 1, limits = c(0, 150)) +
+    labs(
+        title = "Rainfall weather stations",
+        caption = "Source: 'BOM'",
+        x = "Longitude",
+        y = "Latitude"
+    ) +
+    theme_bw()
+```
+
+In of itself an interesting plot. You can see heaps of weather stations over Eastern Australian and around Perth but few to none over the deserts. Its probably a really good plot of which parts of Australia are inhabited. You can pick out some important routes like the Overland railway across the Nullabor and the Stuart highway runing from Darwin to Port Augusta.
+
+However it shows a whole bunch of red indicating that many of those stations had only a few years of complete data.
+
+## What we need is some quality control
+
+To get good quality data for my analysis I wrote a program that would examine each station individually and then pick out those that had nearly complete records from 1950 onwards. If i tried to go earlier than 1950 then the number of recording stations with complete records drops off rapidly.
+
+The following plot shows those stations and the median annual rainfall recorded by each of those stations during that time period.
+
+```{r}
+stations %>%
+    inner_join(baselines, by = c("Zone", "Station")) %>%
+    filter(Minor_Period == 12) %>%
+    ggplot() %>%
+    aus_dark_map() +
+    geom_point(aes(x = Longitude, y = Latitude, color = Rainfall.L12.Median), size = 1) +
+    scale_colour_distiller(name = "Annual Rainfall (mm)", type = "div", palette="RdBu", direction = 1, trans = "log2") +
+    labs(
+        title = "Average annual rainfall - 1950 to Present",
+        caption = "Source: 'BOM'",
+        x = "Longitude",
+        y = "Latitude"
+    ) +
+    theme_bw()
+```
+
+It might look paltry in comparison to the full list but we still end up with 490 weather stations giving us a grand total of 18 million observations.
+
+And the rainfall amounts seem to make sense. You can see the areas with high rainfall areas east of the Great Divide getting drier into Central Australia. 
+
+Also this plot really brings home a message. Those dots on the map represent someone who has been consistently recording rainfall observations, almost every day from 1950 onwards. Someone in a local council, a post office employee perhaps, or maybe a farmer. But as the dots go red you get less dots, less people working and living making those observations behind those dots.
+
+# Apples versus Apples
+
+Okay now we've got some data thats been consistently recorded over a reasonable period of time. And if you recall from my [previous article](https://www.linkedin.com/pulse/discovering-climate-change-australian-temperature-matthew-coad/) that period of time does cover a consistent increase in temperature across australia.
+
+So now it should be easy to see what happening to the rainfall across Australia. Hah I wish. We don't have "A land of droughts and flooding rains" in our national anthem for nothing!
+
+Take the Mcleod creek station in Western Australia which has been operating since 1907. (Also notable because it has the lowest station number). During january it typically records a rainfall of 15mm, but its been as low as 1mm and high as 153mm. When you try to graph it you get a crazy mess. The trick I used for the temperature record of comparing the observations with baseline observations on the same day of the year just doesn't work. Not even trying to compare rainfalls for the same month didn't work! When it comes to rainfall in Australia, outliers are the norm!
+
+The best way I found to make sense of it was to look at total rainfall for an entire year. This evens out the wild fluctations and also takes care of variation throughout the seasons. I felt it was okay because to some extent we are interested in how much water has *piled up* in our dams and reservoirs over time.
+
+Then with that in hand you can then get a sense of whether its been dry or wet over the last year by comparing it with other years. I've done this to get what I call a **Rainfall rating**. It varies from -5 to 5 where zero is about average, -5 is same as the driest years and 5 is the same as the wettest years.
+
+With these tools in hand you can map out how rainfall varied from year to year. Like during the droughts in the naughties.
+
+```{r}
+
+monthly_valuations %>%
+    filter(Major_Period >= 2002, Major_Period <= 2010, Minor_Period == 12) %>%
+    inner_join(stations, by = c("Zone", "Station")) %>%
+    ggplot() %>%
+    aus_dark_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = Rainfall.L12.Rating), alpha = 0.5, size = 1) +
+    scale_colour_distiller(type = "div", palette="RdBu", direction = 1) +
+    facet_wrap(~ Major_Period) +
+    labs(
+        x = "Longitude",
+        y = "Latitude",
+        color = "Rainfall Rating"
+    ) +
+    
+    theme_bw()
+
+```
+
+You can see the prolonged period of dry spells that South Eastern Australia experienced during this period. We are only supposed to get that deep red one year in ten but we got it 2 maybe 3. Also you can see when the dry spell broke in 2010.
+
+## Climate Regions
+
+If you examine these maps you can get a sense that certain stations tend to "go together". For instance when the drought broke in 2010, with the entirety of Eastern Australia experiencing top levels of rainfall, perth has having a dry spell. If you look closely you can see a band on the southern coast from half way across South Australia right across Victoria that tends to vary together.
+
+It turns out that in order to make sense of how rainfall is changing across Australia you need to find these stations that are "associated".
+
+To do this I used a machine learning algorithm called "Kmeans". I used it to group together stations that are "close" to each other. However "closeness" doesn't have to be defined in terms of physical distance, you can use any set of values you like. In this case I used the  annual rainfall for a number of years and the physical distance. The idea was to balance up having similarish annual rainfall, "varying together" and the stations being reasonably close together.
+
+Once we run the algorithm we get this grouping.
+
+```{r}
+
+stations %>%
+    inner_join(regions, by =c("Zone", "Station")) %>%
+    ggplot() %>%
+    aus_dark_map() + 
+    geom_point(aes(x = Longitude, y = Latitude, color = RegionID)) +
+    scale_colour_distiller(type = "div", palette="RdBu") +
+    labs(
+        title = "Stations grouped by rainfall and distance",
+        x = "Longitude",
+        y = "Latitude",
+        color = "Region ID"
+    ) +
+    theme_bw()
+
+```
+
+The machine doesn't know what the regions are so it just gives each region a number. But we can examine the groupings to see that its picked out areas like Victoria and Tasmania south of the Great Divide, South Australia and Victoria north of the Great Divide, the farming regions in N.S.W., the Outback and so on.
+
+# Is Australia getting drier?
+
+```{r}
+
+# Function to plot a analysis dashboard for a specific region
+
+region_dashboard <- function(regionID, start_period, end_period, minor_period, rain_limit = NULL) {
+    
+    df <- 
+        monthly_valuations %>%
+        inner_join(regions, by = c("Zone", "Station")) %>% 
+        filter(RegionID %in% regionID) %>%
+        filter(Major_Period >= start_period, Major_Period <= end_period)
+    df_summary <- 
+        df  %>%
+        group_by(Date) %>%
+        summarise(Rainfall.L12.Median = median(Rainfall.L12))
+    n_stations <- regions %>% filter(RegionID %in% regionID) %>% nrow()
+    
+    layout <- rbind(c(1,1),
+             c(2,3))
+
+    trend_plot <-
+        df_summary %>%
+        ggplot(aes(x = Date, y = Rainfall.L12.Median)) +
+        geom_line(color = "grey30") +
+        geom_smooth(formula = y ~ x, method = "lm", color = "blue", se = FALSE) +
+        labs(
+            x = "Year",
+            y = "Median rainfall for last 12 months (mm)"
+        ) +
+        theme_bw()
+    if (!is.null(rain_limit)) {
+        trend_plot <- trend_plot + coord_cartesian(ylim = rain_limit)
+    }
+
+    station_map <- stations %>%
+            inner_join(regions, by = c("Zone", "Station")) %>%
+            filter(RegionID %in% regionID) %>%
+            ggplot() %>%
+            aus_map() +
+            geom_point(aes(x = Longitude, y = Latitude), size = 1, color = "Purple") +
+            annotate("text", -Inf, -Inf, label = paste0("Total stations ",n_stations), hjust = -0.1, vjust = -1) +
+            guides(colour=FALSE) +
+            labs(
+                x = "Longitude",
+                y = "Latitude"
+            ) +
+            theme_bw()
+
+    rainfall_plot <-
+        df %>%
+            filter(Minor_Period == minor_period) %>%
+            ggplot(aes(x = Date, y = Rainfall.L12)) +
+            geom_point(aes(color = Station), alpha = .25, size = .75) +
+            geom_line(data = df_summary, aes(y = Rainfall.L12.Median), alpha = 0.5) +
+            guides(colour=FALSE) +
+            coord_cartesian(ylim = c(0, 2000)) +
+            labs(
+                x = "Year",
+                y = "Rainfall (mm)"
+            ) +
+            theme_bw()
+
+    plot <- gridExtra::grid.arrange(
+        trend_plot,
+        station_map,
+        rainfall_plot,
+        layout_matrix = layout,
+        heights= c(2,1)
+    )
+}
+```
+
+Getting to this stage has taken a lot of work. Much poking around, coding, stats, plotting and rearranging to get a clear signal out of those half a billion rows of data spread over 17,000 files.
+
+But after trying a lot of things I think I've found a way to show whats going on thats easy to understand.
+
+Lets see it for region 2.
+
+```{r, fig.asp = 1}
+region_dashboard(2, baseline_start, baseline_end, 12, rain_limit = c(100, 800))
+```
+
+We can see from the map on this dashboard that this analysis is for 101 weather stations in Southern Western Australia. 
+
+In the bottom right hand is the rainfall for each station over time. Each point represents the total rainfall for the prior 12 months. Each station has its own color which helps give a sense of how all the points are connected. Next I've plotted the median rainfall in black. The median rainfall shows what the "typical" rainfall is for all those stations.
+
+Don't let all the red dots above the median line fool you. Their are an equal number of points below the line as above it but they overlap so much they are hard to see.
+
+That median line is where all the action is and so it get its own plot on top. Its ups and downs show the "Droughts and flooding rains" that Australians live with. 
+
+The blue line is the trend over time. Its pretty damn flat so for this region the answer seems to be no. Its not getting drier.
+
+## Headin' down South!
+
+Lets see the same dashboard for region 3. My home region. Southern Victoria and Tasmania.
+
+```{r, fig.asp = 1}
+region_dashboard(3, baseline_start, baseline_end, 12, rain_limit = c(400, 1100))
+```
+
+Well here we get quite a different story. You can clearly see the [Millennium drought](https://en.wikipedia.org/wiki/Drought_in_Australia#2000s_or_'Millennium'_drought_in_south-eastern_Australia). Its recovered a bit but in general it looks like we just don't as much rain as we used to. The trend line shows that the typical rainfall has dropped from 800mm a year to around 680mm a year.
+
+## New South Wales
+
+```{r, fig.asp = 1}
+region_dashboard(c(7), baseline_start, baseline_end, 12, rain_limit = c(400, 1100))
+```
+
+This region seems to cover a lot of the areas currently in drought in New South Wales.. Because each point is the prior years data and my data only goes up to 2017 its about 2 years behind but it might be showing the start of it.
+
+In general this area has a lower rainfall than Southern Victorian region which is probably why the algorithm grouped them together.
+
+Like the Southern region it shows a downward trend.
+
+## Southern Queensland
+
+```{r, fig.asp = 1}
+region_dashboard(c(4), baseline_start, baseline_end, 12, rain_limit = c(400, 1100))
+```
+
+In general we got more rain in South East Queensland. But again the trend is downward from 800mm to 710mm. It looks like we don't get quite the same peaks anymore.
+
+## South Australia
+
+```{r, fig.asp = 1}
+region_dashboard(c(5), baseline_start, baseline_end, 12, rain_limit = c(100, 800))
+```
+
+This area convering South Australia and Western Victoria is considerably drier than Eastern Australia but they do grow lots of wheat out there. 
+
+Its doesn't really seem to have a distinct trend. Note that the trend graph is for a smaller range than for the Eastern states so the small trend looks bigger in comparison.
+
+# Conclusion
+
+And I'll leave it there. If you look at the remaining regions they repeat the pattern of Western Australia and South Australia of not really having a trend.
+
+But it seems that its not so much the case that Australia is getting drier, but rather the Eastern states are getting drier.
+

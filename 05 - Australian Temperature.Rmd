@@ -16,6 +16,7 @@ library(rlang)
 source("scripts/Settings.R")
 source("scripts/Temperature.R")
 source("scripts/AusWeather.R")
+source("scripts/AusClimate.R")
 source("scripts/Utility.R")
 
 ```

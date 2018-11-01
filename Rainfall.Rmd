@@ -12,6 +12,7 @@ library(knitr)
 
 source("./Scripts/Settings.R")
 source("./Scripts/AusWeather.R")
+source("./Scripts/AusClimate.R")
 source("./Scripts/Utility.R")
 
 library(recipes)

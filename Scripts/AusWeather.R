@@ -2,6 +2,7 @@ library(tidyverse)
 library(rlang)
 library(lubridate)
 library(rvest)
+library(emc)
 
 ## --------------------------------------------------
 ## Prep
@@ -190,7 +191,7 @@ aus_observations <- function(stations, observation_info) {
     stations %>% purrr::map_dfr(station_observations)
 }
 
-aus_validate_observations <- function(station, observation_info) {
+aus_validate_observations <- function(stations, observation_info) {
     
     station_validation <- function(station) {
         file_path <- aus_observation_file_path(observation_info, station)
@@ -227,12 +228,17 @@ aus_variable_summariser <- function(variable, prefix = rlang::quo_name(variable)
 
 aus_observation_summary <- function(station, observation_info) {
 
+    all_stations <- aus_load_stations(observation_info$station_info)
     observation_variable <- observation_info$observation_variable
     station_df <- tibble(Zone = "AUS", Station = station)
     variable_df <- tibble(variable = rlang::quo_name(observation_info$observation_variable), units = observation_info$Units)
     
     validation_df <- aus_validate_observations(station, observation_info) %>% select(Status = status, Error = error)
-    
+
+    station_count <- all_stations %>% filter(Station == station) %>% nrow()
+    if (station_count > 1) {
+        validation_df$Status <- "Duplicate"
+    }
     observations_available <- validation_df$Status == "Good"
     
     if (observations_available) {
@@ -298,7 +304,7 @@ aus_observation_summaries <- function(observation_info) {
     station_info <- observation_info$station_info
     summariser <- function() {
         stations <- aus_load_stations(station_info)
-        summaries <- stations %>% emc_map(aus_observation_summary(Station, observation_info))
+        summaries <- stations %>% pull(Station) %>% map_dfr(function(station) aus_observation_summary(station, observation_info))
         summaries
     }
     
@@ -326,8 +332,8 @@ aus_observation_clean_summary <- function(stations, clean_info) {
 
     observation_info <- clean_info$observation_info
     station_info <- observation_info$station_info
-    station_df <- aus_load_stations(station_info) %>% filter(Station %in% stations)
-    summaries <- aus_observation_summaries(observation_info) %>% filter(Station %in% stations)
+    station_df <- aus_load_stations(station_info) %>% filter(Station %in% stations) %>% distinct(Zone, Station, .keep_all = TRUE)
+    summaries <- aus_observation_summaries(observation_info) %>% filter(Station %in% stations) %>% distinct(Zone, Station, .keep_all = TRUE)
     summaries <- station_df %>% inner_join(summaries, by = c("Zone", "Station"))
     summary_all <- summaries %>% unnest(All)
     data_available <- summary_all$Status == "Good"
@@ -476,8 +482,6 @@ aus_rainfall_observations_info <- aus_observation_info(
     "millimetres"
 )
 
-aus_rain_clean_info <- aus_clean_info("Rain", aus_rainfall_observations_info)
-
 aus_maxtemp_observations_info <- aus_observation_info(
     aus_temperature_station_info,
     "maxtemp",  
@@ -549,8 +553,6 @@ aus_maxtemp_observations_info <- aus_observation_info(
     "Degree C"
 
 )
-
-aus_maxtemp_clean_info <- aus_clean_info("Max_temp", aus_maxtemp_observations_info)
 
 aus_mintemp_observations_info <- aus_observation_info(
     aus_temperature_station_info,
@@ -626,8 +628,6 @@ aus_mintemp_observations_info <- aus_observation_info(
     
 )
 
-aus_mintemp_clean_info <- aus_clean_info("Min_temp", aus_mintemp_observations_info)
-
 ## -----------------------------------------------------
 ## Memorise data
 ## -----------------------------------------------------
@@ -666,189 +666,4 @@ aus_update_rainfall <- function() {
     # Request observation summaries to ensure they are cached
     aus_observation_summaries(aus_rainfall_observations_info)
 }
-
-    
-## -----------------------------------------------------
-## Valuation
-## -----------------------------------------------------
-
-aus_year_period <- function(variable = sym("Date")) quo(year(!! variable ))
-aus_daily_period <- function(variable = sym("Date")) quo(yday(!! variable ))
-aus_monthly_period <- function(variable = sym("Date")) quo(month(!! variable ))
-aus_yearly_period <- function(variable = sym("Date")) 0
-
-aus_valuation_info <- function(
-    name, clean_info, 
-    baseline_start = 1951, baseline_end = 1980, clean_years = baseline_end - baseline_start + 1,
-    major_period = aus_year_period(), minor_period = aus_daily_period(),
-    input_variables = list(clean_info$observation_info$observation_variable), 
-    mutators = list(), summarisers = list(), 
-    output_variable = clean_info$observation_info$observation_variable,
-    scale = FALSE) {
-    observation_info <- clean_info$observation_info
-    list(
-        name = name,
-        observation_info = observation_info,
-        clean_info = clean_info,
-        baseline_start = baseline_start,
-        baseline_end = baseline_end,
-        clean_years = clean_years,
-        major_period = major_period,
-        minor_period = minor_period,
-        input_variables = input_variables,
-        mutators = mutators,
-        summarisers = summarisers,
-        output_variable = output_variable,
-        anamoly_variable = rlang::sym(sprintf("%s.Anamoly", rlang::quo_name(observation_info$observation_variable))),
-        scale = scale
-    )
-}
-
-aus_maxtemp_valuation_info <- aus_valuation_info("Max_temp", aus_maxtemp_clean_info)
-
-aus_baseline_stations <- function(valuation_info) {
-
-    # valuation_info <- aus_maxtemp_valuation_info
-    
-    observation_info <- valuation_info$observation_info
-    clean_info <- valuation_info$clean_info
-    start_year <- valuation_info$baseline_start
-    end_year <- valuation_info$baseline_end
-    clean_years <- valuation_info$clean_years
-    station_info <- observation_info$station_info
-    stations <- aus_load_stations(station_info)
-    station_summaries <- aus_observation_clean_summary(stations$Station, clean_info) %>% filter(Clean)
-    station_yearly_summary <- station_summaries %>% unnest(Clean_Yearly) %>% filter(Year >= start_year, Year <= end_year, Year_Clean)
-
-    station_qualifying_years <-
-        station_yearly_summary %>%
-        group_by(Zone, Station) %>%
-        summarise(N_Years = n())
-
-    qualifying_stations <- station_qualifying_years %>% filter(N_Years >= clean_years)
-
-    baseline_stations <- stations %>% inner_join(qualifying_stations, by = c("Zone", "Station"))
-    baseline_stations
-}
-
-aus_valuations <- function(observations, valuation_info, baselines = NULL) {
-    
-    # Prototype Start
-    # station <- test_station
-    # valuation_info <- aus_maxtemp_valuation_info
-    
-    observation_info <- valuation_info$observation_info
-    
-    scale <- valuation_info$scale
-    has_baselines <- !is.null(baselines)
-    is_daily <- valuation_info$major_period == aus_year_period() && valuation_info$minor_period == aus_daily_period()
-    
-    input_variables <- valuation_info$input_variables
-    input_variable_names <- input_variables %>% map_chr(~ rlang::quo_name(.))
-    observation_mutators <- valuation_info$mutators
-    observation_summarisers <- valuation_info$summarisers
-    output_variable <- valuation_info$output_variable
-    output_variable_name <- rlang::quo_name(output_variable)
-    anamoly_variable <- valuation_info$anamoly_variable
-    
-
-    if (!is_daily) {
-        date_mutators <- list2()
-        date_summarisers <- list2(
-            Median_Date = quo(as_date(floor((as.integer(max(Date)) + as.integer(min(Date))) / 2))),
-            Min_Date = quo(min(Date)),
-            Max_Date = quo(max(Date))
-        )
-    }
-    else {
-        date_mutators <- list2(
-            Median_Date = quo(Date),
-            Min_Date = quo(Date),
-            Max_Date = quo(Date)
-        )
-        date_summarisers <- list2()
-    }
-    
-    if (!has_baselines) {
-        baselines_names <- c()
-        anomoly_mutators <- list()
-    }
-    else {
-        
-        baselines_names <- c("Baseline.Mean", "Baseline.SD")
-        if (scale) {
-            anomoly_mutators <- list2(
-                !! anamoly_variable := quo((!! output_variable - Baseline.Mean) / Baseline.SD)
-            )
-        }
-        else {
-            anomoly_mutators <- list2(
-                !! anamoly_variable := quo(!! output_variable - Baseline.Mean)
-            )
-        }
-    }
-
-    valuations <- 
-        observations %>% 
-        mutate(Major_Period = !! valuation_info$major_period, Minor_Period = !! valuation_info$minor_period) %>%
-        mutate(!!! observation_mutators, !!! date_mutators)
-
-    summarisers <- append(observation_summarisers, date_summarisers)
-    if (length(summarisers) > 0) {
-        valuations <- 
-            valuations %>%
-            group_by(Zone, Station, Major_Period, Minor_Period) %>%
-            summarise(!!! summarisers) %>%
-            ungroup()
-    }
-    if (!is.null(baselines)) {
-        valuations <- 
-            valuations %>%
-            left_join(baselines, by = c("Zone", "Station", "Minor_Period"))
-    }    
-    if (length(anomoly_mutators) > 0) {
-        valuations <- 
-            valuations %>% 
-            mutate(!!! anomoly_mutators)
-    }
-    
-    variables <- c(
-        "Zone",
-        "Station",
-        "Major_Period",
-        "Minor_Period",
-        input_variable_names,
-        names(observation_mutators),
-        names(observation_summarisers),
-        baselines_names,
-        names(anomoly_mutators),
-        names(date_mutators),
-        names(date_summarisers)
-    )
-    valuations <- valuations %>% select(variables)
-    valuations
-}
-
-aus_valuation_baselines <- function(observations, valuation_info) {
-    
-    baseline_observations <-
-        observations %>% 
-        mutate(Major_Period = !! valuation_info$major_period, Minor_Period = !! valuation_info$minor_period) %>%
-        filter(Major_Period >= valuation_info$baseline_start & Major_Period <= valuation_info$baseline_end)
-    
-    valuations <- aus_valuations(baseline_observations, valuation_info)
-    
-    output_variable <- valuation_info$output_variable
-
-    valuation_baselines <- valuations %>%
-        group_by(Zone,Station,Minor_Period) %>%
-        summarise(
-            Baseline.N = sum(!is.na(!! output_variable)),
-            Baseline.Mean = mean(!! output_variable, na.rm = TRUE),
-            Baseline.SD = sd(!! output_variable, na.rm = TRUE)
-        )
-    valuation_baselines
-}
-
-
 
