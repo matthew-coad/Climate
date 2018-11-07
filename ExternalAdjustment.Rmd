@@ -84,37 +84,45 @@ regional_df %>%
 
 ```{r, fig.asp = 1}
 
-algorithms <- c("earth", "null", "svmRadial", "rf")
-tr_parameters <- expand.grid(algorithm = algorithms) %>% mutate(label = paste0("Algorithm ", algorithm))
+# algorithms <- c("earth", "null", "svmRadial")
+algorithms <- c("earth", "null")
+lags <- seq2(0, 24)
+tr_parameters <- 
+    expand.grid(Algorithm = algorithms, N_Lag = lags) %>% 
+    mutate(label = paste0("Algorithm ", Algorithm, " lag ", N_Lag))
 
 regionID <- 3
-tr_df <- regional_df %>% filter(RegionID == regionID, Year >= baseline_start, Year <= baseline_end)
-tr_recipe <- 
-    recipe(Rainfall ~ SOI, tr_df) %>% 
-    step_lag(SOI, lag = 1) %>% 
-    step_lag(SOI, lag = 2) %>%
-    step_lag(SOI, lag = 3) %>%
-    step_lag(SOI, lag = 4) %>%
-    step_lag(SOI, lag = 5) %>%
-    step_naomit(all_predictors())
-tr_control <- trainControl(method = "boot")
+tr_df <- function(n_lag) {
+    regional_df %>% 
+    filter(RegionID == regionID, Year >= baseline_start, Year <= baseline_end) %>%
+    arrange(Date) %>%
+    mutate(SOI.Lag = lag(SOI, n_lag), SOI.Standard.Lag = lag(SOI.Standard, n_lag)) %>%
+    filter(!is.na(SOI.Lag))
+}
+    
+tr_recipe <- function(n_lag) {
+    recipe(Rainfall.Rating ~ SOI.Lag, tr_df(n_lag))
+}
+
+tr_control <- function() trainControl(method = "boot")
+tr <- function(algorithm, n_lag) {
+    set.seed(seed)
+    train(tr_recipe(n_lag), tr_df(n_lag), method = algorithm, trControl = tr_control()) 
+}
 metric <- "RMSE"
 seed <- 100
 tr_emc <-
     emc_bind(
         tr_parameters,
         emc_record(
-            train = {
-                set.seed(seed)
-                train(tr_recipe, tr_df, method = algorithm, trControl = tr_control) 
-            }
-            ,
+            train = tr(Algorithm, N_Lag),
             .label = label,
             .verbose = FALSE
-        )
+        ),
+        emc_performance(train)
     )
 tr_working_emc <- tr_emc %>% filter(train_errors == 0)
-tr_emc %>% select(algorithm, train_error, train_warnings)
+tr_emc %>% select(Algorithm, N_Lag, train_error, train_warnings)
 
 ```
 
@@ -124,8 +132,33 @@ tr_resamples <-
     tr_working_emc %>% 
     emc_bind(emc_resamples(train)) %>% 
     unnest(resamples) %>% 
-    select(algorithm, RMSE, MAE, Resample)
-ggplot(tr_resamples) + geom_boxplot(aes(x = algorithm, y = RMSE))
+    select(Algorithm, N_Lag, RMSE, MAE, Resample)
+ggplot(tr_resamples) + geom_boxplot(aes(x = Algorithm, y = RMSE)) + facet_wrap(~ N_Lag)
+
+tr_performance  <- 
+    tr_working_emc %>% 
+    emc_bind(emc_performance(train)) %>% 
+    select(Algorithm, N_Lag, RMSE, MAE)
+ggplot(tr_performance) + geom_line(aes(x = N_Lag, y = RMSE, color=Algorithm))
+
+
+```
+
+```{r}
+
+tr_df(0) %>%
+    filter(Year >= 2010, Year <= 2020) %>%
+    ggplot(aes(x = Date)) +
+    geom_line(aes(y = Rainfall.Rating.Standard, color = "Rainfall")) +
+    geom_line(aes(y = SOI.Standard.Lag, color = "SOI"), alpha = 0.6) +
+    labs(
+        x = "Date",
+        y = "Values"
+    ) +
+    theme_bw()
+
+
+```
 
 ```
 

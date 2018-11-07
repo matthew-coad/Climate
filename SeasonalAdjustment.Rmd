@@ -270,7 +270,7 @@ season_adjusted_rainfall <-
         SOI, SOI.Standard)
 
 season_adjusted_rainfall %>%
-    filter(Year >= 1970, Year <= 1980) %>%
+    filter(Year >= 1980, Year <= 1990) %>%
     ggplot(aes(x = Date)) +
     geom_line(aes(y = Rainfall.Standard, color = "Rainfall")) +
     geom_line(aes(y = Rainfall.Seasonal.Standard, color = "Seasonal Rainfall"), alpha = 0.6) +
