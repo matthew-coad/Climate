@@ -1,0 +1,194 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(caret)
+library(recipes)
+
+knitr::opts_chunk$set(echo = FALSE)
+
+source("./Scripts/Settings.R")
+source("./Scripts/AusWeather.R")
+source("./Scripts/AusClimate.R")
+source("./Scripts/AusMaps.r")
+source("./Scripts/AusRainfall.r")
+source("./Scripts/SOI.r")
+source("./Scripts/Utility.R")
+
+```
+
+## Load our best quality data
+
+```{r}
+
+# Analysis period
+baseline_start <- 1950
+baseline_end <- 2017
+n_quantile <- 11
+
+# Minimum number of years of data
+# Allow stations to drop out for a few years
+clean_years <- baseline_end - baseline_start - 2
+
+# Load the data
+rainfall_data <- aus_memorised_rainfall_data(baseline_start, baseline_end, clean_years)
+stations <- rainfall_data$stations
+observations <- rainfall_data$observations
+monthly_observations <- aus_rainfall_monthly_observations(observations)
+baselines <- aus_rainfall_baselines(monthly_observations, baseline_start, baseline_end, n_quantile)
+monthly_valuations <- aus_rainfall_monthly_valuations(monthly_observations, baselines, n_quantile)
+regions <- aus_rainfall_regions(stations, monthly_valuations, 2000, 10, 12, 3, 7)
+
+soi_df <- soi_load() %>% mutate(SOI.Standard = scale(SOI))
+
+```
+
+## Build Model Input Data
+
+```{r}
+
+regional_df <- 
+    monthly_valuations %>%
+    inner_join(regions, by = c("Zone", "Station")) %>%
+    group_by(Date, RegionID) %>%
+    summarise(Rainfall = median(Rainfall), Rainfall.Rating = mean(Rainfall.Rating)) %>%
+    group_by(RegionID) %>%
+    mutate(Rainfall.Standard = scale(Rainfall), Rainfall.Rating.Standard = scale(Rainfall.Rating)) %>%
+    inner_join(soi_df, by = "Date") %>%
+    mutate(Year = year(Date), Month = month(Date)) %>%
+    select(RegionID, Date, Year, Month, Rainfall, Rainfall.Standard, Rainfall.Rating, Rainfall.Rating.Standard, SOI, SOI.Standard)
+regional_df %>% filter(RegionID == 3)
+
+```
+
+```{r}
+
+regional_df %>%
+    filter(RegionID == 3, Year >= 2010) %>%
+    ggplot(aes(x = Date)) +
+    geom_line(aes(y = Rainfall.Rating.Standard, color = "Rainfall")) +
+    geom_line(aes(y = SOI.Standard, color = "SOI"), alpha = 0.6) +
+    labs(
+        x = "Date",
+        y = "Values"
+    ) +
+    theme_bw()
+
+
+```
+
+## Run Training Experiment
+
+```{r, fig.asp = 1}
+
+algorithms <- c("earth", "null", "svmRadial", "rf")
+tr_parameters <- expand.grid(algorithm = algorithms) %>% mutate(label = paste0("Algorithm ", algorithm))
+
+regionID <- 3
+tr_df <- regional_df %>% filter(RegionID == regionID, Year >= baseline_start, Year <= baseline_end)
+tr_recipe <- 
+    recipe(Rainfall ~ SOI, tr_df) %>% 
+    step_lag(SOI, lag = 1) %>% 
+    step_lag(SOI, lag = 2) %>%
+    step_lag(SOI, lag = 3) %>%
+    step_lag(SOI, lag = 4) %>%
+    step_lag(SOI, lag = 5) %>%
+    step_naomit(all_predictors())
+tr_control <- trainControl(method = "boot")
+metric <- "RMSE"
+seed <- 100
+tr_emc <-
+    emc_bind(
+        tr_parameters,
+        emc_record(
+            train = {
+                set.seed(seed)
+                train(tr_recipe, tr_df, method = algorithm, trControl = tr_control) 
+            }
+            ,
+            .label = label,
+            .verbose = FALSE
+        )
+    )
+tr_working_emc <- tr_emc %>% filter(train_errors == 0)
+tr_emc %>% select(algorithm, train_error, train_warnings)
+
+```
+
+```{r}
+
+tr_resamples <- 
+    tr_working_emc %>% 
+    emc_bind(emc_resamples(train)) %>% 
+    unnest(resamples) %>% 
+    select(algorithm, RMSE, MAE, Resample)
+ggplot(tr_resamples) + geom_boxplot(aes(x = algorithm, y = RMSE))
+
+```
+
+```{r}
+
+emc_augment <- function(.train, .data, .variable) {
+    
+    variable_name <- quo_name(.variable)
+    prediction_var <- sym(sprintf("%s.Prediction", variable_name))
+    residual_var <- sym(sprintf("%s.Residual", variable_name))
+    train <- .train[[1]]
+    if (is.null(train)) {
+        return(tibble::tibble()[1,])
+    }
+    prediction <- predict(train, newdata = .data)
+    original <- .data %>% pull(!! .variable)
+    residual <- original - prediction
+    augment_df <- bind_cols(!! prediction_var := prediction, !! residual_var := residual, .data)
+    tibble(augment = list(augment_df))
+}
+
+tr_augment_emc <- 
+    emc_bind(
+        tr_working_emc,
+        emc_augment(train, regional_df %>% filter(RegionID == regionID), quo(Rainfall))
+    )
+tr_augmented <- tr_augment_emc %>% select(algorithm, augment) %>% unnest(augment) %>% as_tibble()
+tr_augmented
+
+```
+
+```{r}
+
+algorithm <- "svmRadial"
+
+regional_adjusted_df <- 
+    tr_augmented %>% 
+    filter(algorithm == "svmRadial") %>% 
+    select(-algorithm) %>% 
+    mutate(Rainfall.Adjusted = Rainfall.Residual + median(Rainfall)) %>%
+    mutate(Rainfall.Adjusted.Standard = Rainfall.Residual / sd(Rainfall)) %>%
+    mutate(RegionID = regionID) %>%
+    select(
+        RegionID, Date, Year, Month, 
+        Rainfall, Rainfall.Standard, Rainfall.Rating, Rainfall.Adjusted, Rainfall.Adjusted.Standard, 
+        SOI, SOI.Standard)
+regional_adjusted_df
+
+
+```
+
+```{r}
+
+regional_adjusted_df %>%
+    filter(Year >= 2000) %>%
+    ggplot(aes(x = Date)) +
+    geom_line(aes(y = Rainfall, color = "Rainfall")) +
+    geom_line(aes(y = Rainfall.Adjusted, color = "Adjusted Rainfall"), alpha = 0.6) +
+    labs(
+        x = "Date",
+        y = "Rainfall"
+    ) +
+    theme_bw()
+
+
+```
