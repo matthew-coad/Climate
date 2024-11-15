@@ -1,0 +1,88 @@
+---
+title: "Exploration - CO2"
+author: "Matthew Coad"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(rprojroot)
+
+source(rprojroot::is_rstudio_project$find_file("Scripts/Settings.R"))
+source(climate_script_path("CO2.R"))
+
+```
+
+## IAC
+
+[Historical CO2 Datasets](https://www.co2.earth/historical-co2-datasets). Like the temperature data its divided into historical reconstructions and more recent datasets based on direct instrument readings. 
+
+Institute for Atmospheric and Climate Science (IAC) at Eidgenössische Technische Hochschule in Zürich, Switzerland.
+
+Accessed from [Historical CO2 Datasets](https://www.co2.earth/historical-co2-datasets).
+." for the historical data. I'll call this data set IAC.
+
+### IAC Annual CO2 levels from 0 to 2014
+
+```{r}
+co2_iac_annual <- get_co2_iac_annual_0To2014()
+glimpse(co2_iac_annual)
+```
+```{r, echo=FALSE, message=FALSE}
+co2_iac_annual %>%
+    ggplot(aes(x= Year, y = CO2.Global, color = CO2.Source)) + 
+    geom_line() + 
+    xlab("Year") + 
+    ylab("Co2 Concentration (Co2)") +
+    guides(color=guide_legend(title="Data Source")) +
+    theme_bw()
+
+```
+
+### MAUNA
+
+C. D. Keeling, S. C. Piper, R. B. Bacastow, M. Wahlen, T. P. Whorf, M. Heimann, and H. A. Meijer, Exchanges of atmospheric CO2 and 13CO2 with the terrestrial biosphere and oceans from 1978 to 2000. I. Global aspects, SIO Reference Series, No. 01-06, Scripps Institution of Oceanography, San Diego, 88 pages, 2001.
+
+Dataset accessed 2018-09-03 at https://data.giss.nasa.gov/gistemp/.
+
+### Mauna annual CO2 levels from 1959 present
+
+```{r}
+co2_mauna_annual <- get_co2_mauna_annual_1959toPresent()
+co2_mauna_annual
+```
+
+```{r}
+co2_mauna_annual %>%
+    ggplot(aes(x= Year, y = CO2.Global, color = CO2.Source)) + 
+    geom_line() + 
+    xlab("Year") + 
+    ylab("Co2 Concentration (Co2)") +
+    theme_bw()
+
+```
+
+### CO2 Annual
+
+Combined CO2 Annual data
+
+```{r}
+co2_annual <- get_co2_annual()
+co2_annual
+```
+```{r}
+co2_annual %>%
+    ggplot(aes(x= Year, y = CO2.Global, color = CO2.Source)) + 
+    geom_line() + 
+    xlab("Year") + 
+    ylab("Co2 Concentration (Co2)") + 
+    labs(
+        title = "Co2 Concentration from 2,000 years ago to present",
+        caption = "Source: 'IAC' and 'MAUNA'") + 
+    guides(color=guide_legend(title="Data Source")) +
+    theme_bw()
+
+```

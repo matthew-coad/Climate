@@ -1,0 +1,48 @@
+---
+title: "Exploration - Temperature"
+author: "Matthew Coad"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(rprojroot)
+
+source(rprojroot::is_rstudio_project$find_file("Scripts/Settings.R"))
+source(climate_script_path("Temperature.R"))
+
+```
+
+## Temperature Anomaly
+
+### GISTEMP Temperature anomaly 
+
+```{r}
+ta_annual <- get_ta_annual()
+glimpse(ta_annual |> filter(TA.Source == "GISTEMP"))
+
+```
+
+### HVNHT Temperature anomaly 
+
+```{r}
+glimpse(ta_annual |> filter(TA.Source == "HVNHT"))
+```
+### Combined Temperature Anomaly
+
+```{r, echo=FALSE, message=FALSE}
+ta_annual %>%
+    ggplot(aes(x= Year, y = TA.Global, color = TA.Source)) + 
+    geom_line() + 
+    geom_hline(yintercept = 0, color = "dark grey") + 
+    xlab("Year") + 
+    ylab("Temperature Anomaly (c)") + 
+    labs(
+        title = "Global temperatures from 2,000 years ago to present",
+        caption = "Source: 'HVNHT' and 'GISTEMP'") + 
+    guides(color=guide_legend(title="Data Source")) +
+    theme_bw()
+```

@@ -1,0 +1,36 @@
+---
+title: "Explore - Settings"
+author: "Matthew Coad"
+date: "2024-11-11"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(rprojroot)
+
+source(rprojroot::is_rstudio_project$find_file("Scripts/Settings.R"))
+
+```
+
+## Settings
+
+This dataset exploration just shows the values of the settings script.
+
+```{r}
+print(paste0("climate datapath ", climate_datapath("test.csv")))
+print(paste0("script path ", climate_script_path("test.r")))
+```
+
+
+```
+
+```
+
+
+
+

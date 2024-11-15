@@ -71,35 +71,12 @@ get_ta_annual_zones_1880toNow <- function() {
     get_ta_GISTEMP_annual_zones("ZonAnn.Ts+dSST.csv")
 }
 
+#' Annual Temperature Anomaly
+#'
+#' @return
 get_ta_annual <- function() {
     early <- get_ta_annual_global_0to1980()
     later <- get_ta_annual_zones_1880toNow()
     result <- early %>% anti_join(later, by="Year") %>% bind_rows(later) %>% arrange(Year)
     result
 }
-
-# get_global_temp_annual <- function() {
-#     datahub_datafile("https://datahub.io/core/global-temp-anomalies", "global-temp-annual")
-# }
-# 
-# get_global_temp_5yr <- function() {
-#     datahub_datafile("https://datahub.io/core/global-temp-anomalies", "global-temp-5yr")
-# }
-# 
-# get_global_temp_monthly <- function() {
-#     raw_df <- datahub_datafile("https://datahub.io/core/global-temp", "monthly")
-#     tidy_df <- raw_df %>% separate(Date, c("Year", "Month"), "-", convert = TRUE)
-#     df <- select(tidy_df, Source, Year, Month, Temperature=Mean)
-#     df
-# }
-# 
-# # datahub_datafiles("https://datahub.io/JohnSnowLabs/nasa-global-temperature-anomalies-time-series-1880-2017")
-# 
-# get_johnsnow_global_temp_monthly <- function() {
-#     months <- c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
-#     raw_df <- datahub_datafile("https://datahub.io/JohnSnowLabs/nasa-global-temperature-anomalies-time-series-1880-2017", "nasa-global-temperature-anomalies-time-series-1880-2017-csv")
-#     tidy_df <- raw_df %>% gather("Month_Field", "Temperature", ends_with("Temperature"))
-#     tidy_df$Month <- factor(str_split(tidy_df$Month_Field, "_") %>% map_chr(~ .[1]), levels = months, ordered = TRUE)
-#     df <- select(tidy_df, Year, Region = Measurement_Region, Month, Temperature)
-#     df
-# }

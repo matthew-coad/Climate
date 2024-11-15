@@ -1,7 +1,14 @@
+library(tidyverse)
+library(rprojroot)
 
+climate_root <- rprojroot::is_rstudio_project
 
 climate_datapath <- function(filename) {
-    path.expand(file.path(".", "Data", filename))
+    file.path(climate_root$find_file("Data"), filename)
+}
+
+climate_script_path <- function(filename) {
+    file.path(climate_root$find_file("Scripts"), filename)
 }
 
 #' Ensure that a directory exists.
